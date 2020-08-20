@@ -1,0 +1,13 @@
+num_locations:
+    - 10
+    - 20
+num_products:
+    - 5
+    - 10
+    - 20
+num_scen:
+    - 1
+    - 25
+    - 125
+    - 500
+num_variations: 3
