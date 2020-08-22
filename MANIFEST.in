@@ -1,1 +1,3 @@
 include README.md
+include sndp_gen/SNDP_*.mpl
+include sndp_gen/SNDP_*.dat
