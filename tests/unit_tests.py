@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 from sndp_gen import SndpGraph, parse_args, command_line
 
+
 class TestSndpGraph(TestCase):
 
     def test_init(self):
@@ -37,7 +38,7 @@ class TestSndpGraph(TestCase):
         # data below might change if we modify the class variables of SndpGraph
         self.assertListEqual(data['MaterialReq'], [{'material': 1, 'value': 2}, {'material': 2, 'value': 3}])
         self.assertListEqual(data['Prob'], [{'SCEN': 1, 'value': 0.5}, {'SCEN': 2, 'value': 0.5}])
-        self.assertListEqual(data['Demand'], [{'SCEN': 1, 'value': 6389}, {'SCEN': 2, 'value': 19366}])
+        self.assertListEqual(data['Demand'], [{'SCEN': 1, 'value': 5673}, {'SCEN': 2, 'value': 7295}])
 
     @classmethod
     def tearDownClass(cls):
@@ -71,6 +72,12 @@ class TestCommandLine(TestCase):
         filename = 'param_wrong.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
         self.assertFalse(command_line())
+
+    @classmethod
+    def tearDownClass(cls):
+        for file in Path().glob("SNDP_*"):
+            file.unlink()
+
 
 if __name__ == '__main__':
     loader = TestLoader()

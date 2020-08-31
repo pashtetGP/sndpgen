@@ -8,20 +8,20 @@ import math
 
 class _Product():
     def __init__(self, id, graph):
-        self._graph_ = graph
+        self._graph = graph
         self.id = id
         self.type = SndpGraph.STR_PRODUCT_TYPE_MATERIAL
-        self._plants_ = [] # plants where it is being manufactures
+        self._plants = [] # plants where it is being manufactures
 
     def add_plant(self, plant):
         if plant in self.get_plants():
             raise ('Plant {} is already in the list of plants of Product {}.'.format(plant.id, self.id))
-        plant._graph_ = self._graph_
-        self._graph_._clear_nodes_data_cache_()
-        self._plants_.append(plant)
+        plant._graph = self._graph
+        self._graph._clear_nodes_data_cache()
+        self._plants.append(plant)
 
     def get_plants(self):
-        return self._plants_[:]
+        return self._plants[:]
 
     def __str__(self):
         if self.type == SndpGraph.STR_PRODUCT_TYPE_END_PRODUCT:
@@ -35,38 +35,38 @@ class _Product():
 
 class _Location():
     def __init__(self, id, graph):
-        self._graph_ = graph
+        self._graph = graph
         self.id = id
-        self._products_ = []
-        self._inbounds_ = [] # inbound routes
-        self._outbounds_ = []  # outbound routes
+        self._products = []
+        self._inbounds = [] # inbound routes
+        self._outbounds = []  # outbound routes
 
     def add_product(self, product):
         if product in self.get_products():
             raise(f'Product {product} is already produced in location {self.id}')
-        product._graph_ = self._graph_
-        self._graph_._clear_nodes_data_cache_()
-        self._products_.append(product)
+        product._graph = self._graph
+        self._graph._clear_nodes_data_cache()
+        self._products.append(product)
         product.add_plant(self)
 
     def get_products(self):
-        return self._products_[:]
+        return self._products[:]
 
     def add_inbound(self, route):
-        route._graph_ = self._graph_
-        self._graph_._clear_nodes_data_cache_()
-        self._inbounds_.append(route)
+        route._graph = self._graph
+        self._graph._clear_nodes_data_cache()
+        self._inbounds.append(route)
 
     def get_inbounds(self):
-        return self._inbounds_[:]
+        return self._inbounds[:]
 
     def add_outbound(self, route):
-        route._graph_ = self._graph_
-        self._graph_._clear_nodes_data_cache_()
-        self._outbounds_.append(route)
+        route._graph = self._graph
+        self._graph._clear_nodes_data_cache()
+        self._outbounds.append(route)
 
     def get_outbounds(self):
-        return self._outbounds_[:]
+        return self._outbounds[:]
 
     def __str__(self):
         if self.get_products():
@@ -84,7 +84,7 @@ class _Route():
             raise('Start and end should be Location objects.')
         if start.id == end.id:
             raise('Start and end are the same location for the route.')
-        self._graph_ = None
+        self._graph = None
         self.start = start
         start.add_outbound(self)
         self.end = end
@@ -100,7 +100,7 @@ class _Route():
 
 class _Scenario():
     def __init__(self, id, probability, demand):
-        self._graph_ = None
+        self._graph = None
         self.id = id
         self.probability = probability
         self.demand = demand
@@ -114,7 +114,7 @@ class _Scenario():
 
 class SndpGraph():
     # Be careful with these parameters
-    FLOAT_PERCENT_OF_LOC_WITH_END_PROD = 0.5 # => this amount*num locations will be number bins in the problem
+    FLOAT_PERCENT_OF_LOC_WITH_END_PROD = 0.5 # this amount*num locations will be number bins in the problem
     INT_MAX_PRODUCTS_IN_ONE_LOCATION = 3  # might be higher under some conditions
     INT_MAX_DISTANCE = 5 # average is 3, too high value might lead to solution value = 0 (cost > sales)
     FLOAT_MIN_SCENARIO_DEMAND = 1000
@@ -129,6 +129,8 @@ class SndpGraph():
 
     INT_MIN_MULTITHREAD_LOCATION_LIMIT = 2000 # we force num_cpu to be 1 if number_locations lower this value
     INT_MAX_LOCATIONS_TO_VISUALIZE = 40 # we will not run visualize() if the number of locations exceeds this value
+    INT_MIN_ITEMS_LOGGING = 250 # we provide completion long for some loops iterator of which has at least these number of itmes
+
 
     def __init__(self, name, num_locations, num_products, num_scen, random_seed = None):
 
@@ -141,9 +143,9 @@ class SndpGraph():
         # Initialize data cache
         scalar_data_names = ['NrOfLocations','NrOfProducts','NrOfScen']
         list_data_names = ['MaterialReq','Prob','Demand','ShipCost','ArcProduct','arc']
-        self._data_ = {name:None for name in scalar_data_names}
+        self._data = {name:None for name in scalar_data_names}
         for name in list_data_names:
-            self._data_[name] = []
+            self._data[name] = []
         self._nodes_cache_cleared_ = True
         self._stochastic_data_cache_cleared_ = True
 
@@ -237,11 +239,14 @@ class SndpGraph():
                     if not self.get_route(plant, end_product_plant):  # if the route does not already exist
                         self.add_route(_Route(plant, end_product_plant, random.randint(1, SndpGraph.INT_MAX_DISTANCE)))
 
+                if num_plants > SndpGraph.INT_MIN_ITEMS_LOGGING:
+                    print(f'Data generated for plant {plant.id}/{num_plants}')
+
         # Test if graph is valid and solve the issues
         # - check if plant with material has at least one route to potential plant: this is guaranteed during assignment of materials to plants
         # - check if every potential plant has all the materials delivered
         # it will also automatically solve the issue if a material has no plant, since such material will not be delivered to all plants
-        for end_product_plant in end_product_plants:
+        for counter, end_product_plant in enumerate(end_product_plants, 1):
             # materials produced in the plant itself
             available_materials = [product for product in end_product_plant.get_products() if
                                    product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL]
@@ -259,13 +264,15 @@ class SndpGraph():
                     random_plant = end_product_plant
                 random_plant.add_product(material)
 
-        # Stochastic data
-        self._scenarios_ = []
-        self.regenerate_stochastic_data(num_scen)
+            if len(end_product_plants) > SndpGraph.INT_MIN_ITEMS_LOGGING:
+                print(f'Data validated for plant {counter}/{len(end_product_plants)}')
 
         end = time.time()
         print('{0} SNDP graph info generated for {1:0.3f} sec.'.format(self.name, end - start))
 
+        # Stochastic data
+        self._scenarios_ = []
+        self.regenerate_stochastic_data(num_scen)
 
     def generate_plant_data(self, worker_id, shared_add_routes, num_cpu = 0):
         '''Used in multiprocessing. Generates most of the data except the stochastic data'''
@@ -321,11 +328,12 @@ class SndpGraph():
                     #self.add_route(Route(plant, end_product_plant, random.randint(1, SNDP_Graph.MAX_DISTANCE)))
                     shared_add_routes[key] = random.randint(1, SndpGraph.INT_MAX_DISTANCE)
 
-            print("Assigned materials and routes to the end products plants for plant {}".format(plant.id,))
+            print(f'Data generated for plant {plant.id}')
 
         return add_products
 
     def regenerate_stochastic_data(self, num_scen):
+        start = time.time()
         if num_scen > (SndpGraph.FLOAT_MAX_SCENARIO_DEMAND - SndpGraph.FLOAT_MIN_SCENARIO_DEMAND):
             raise ValueError("SNDP_Graph.FLOAT_MAX_SCENARIO_DEMAND is too small for the num_scen.")
 
@@ -338,6 +346,9 @@ class SndpGraph():
         left_probability = 1.0 - sum(scen.probability for scen in self.get_scenarios())
         assert (left_probability > 0)
         self.add_scenario(_Scenario(num_scen, left_probability, demands[num_scen - 1]))  # last scenario
+        end = time.time()
+
+        print('{0} SNDP stochastic data generated for {1:0.3f} sec.'.format(self.name, end - start))
 
     def visualize(self, format='jpg', view=False, to_file=None):
         if len(self.get_locations()) > SndpGraph.INT_MAX_LOCATIONS_TO_VISUALIZE:
@@ -371,7 +382,7 @@ class SndpGraph():
         self.dot_graph.render(to_file, view=view)
 
     def data_as_dict(self):
-        data = self._data_
+        data = self._data
 
         # Consts from class variables
         data['SalesPrice'] = SndpGraph.FLOAT_SALES_PRICE
@@ -391,7 +402,8 @@ class SndpGraph():
             ArcProduct_value = [] # product, start, finish, 1
             arc_value_set = set() # values should be distinct
             end_product = self.get_end_product()
-            for route in self.get_routes():
+            routes = self.get_routes()
+            for counter, route in enumerate(routes, 1):
                 ShipCost_value.append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
                 # let us look at the routes and products delivered on them
                 for product in route.start.get_products():
@@ -399,16 +411,25 @@ class SndpGraph():
                         continue
                     ArcProduct_value.append({'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1})
                     arc_value_set.add(f'{route.start.id},{route.end.id}')
+
+                if len(routes) > SndpGraph.INT_MIN_ITEMS_LOGGING:
+                    print(f'Data transformed to dict for route {counter}/{len(routes)}')
+
             data['ShipCost'] = ShipCost_value
 
             # arcs for production
-            for location in self.get_end_product_plants():
+            end_product_plants = self.get_end_product_plants()
+            for counter, location in enumerate(end_product_plants, 1):
                 for product in location.get_products():
                     # ship 344 should be only if 4 is the end product plant
                     if product == end_product:
                         continue
                     ArcProduct_value.append({'product': product.id, 'start': location.id, 'finish': location.id, 'value': 1})
                     arc_value_set.add(f'{location.id},{location.id}')
+
+                if len(end_product_plants) > SndpGraph.INT_MIN_ITEMS_LOGGING:
+                    print(f'Data transformed to dict for prouction arc {counter}/{len(end_product_plants)}')
+
             data['ArcProduct'] = ArcProduct_value
 
             # decode arc value
@@ -430,32 +451,32 @@ class SndpGraph():
 
         return data
 
-    def _clear_nodes_data_cache_(self):
+    def _clear_nodes_data_cache(self):
         if not self._nodes_cache_cleared_:
             for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
-                self._data_[name] = None
+                self._data[name] = None
             for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
-                self._data_[name] = []
+                self._data[name] = []
             self._nodes_cache_cleared_ = True
 
-    def _clear_stochastic_data_cache_(self):
+    def _clear_stochastic_data_cache(self):
         if not self._stochastic_data_cache_cleared_:
             for name in ['NrOfScen']:
-                self._data_[name] = None
+                self._data[name] = None
             for name in ['Prob', 'Demand']:
-                self._data_[name] = []
+                self._data[name] = []
             self._stochastic_data_cache_cleared_ = True
 
     def add_route(self, route):
         if self.get_route(route.start, route.end):
             raise ('Route already exists in the graph.')
-        self._clear_nodes_data_cache_()
-        route._graph_ = self
+        self._clear_nodes_data_cache()
+        route._graph = self
         self._routes_['{}-{}'.format(route.start.id, route.end.id)] = route
 
     def add_scenario(self, scenario):
-        self._clear_stochastic_data_cache_()
-        scenario._graph_ = self
+        self._clear_stochastic_data_cache()
+        scenario._graph = self
         self._scenarios_.append(scenario)
 
     def get_products(self):
