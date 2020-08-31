@@ -117,19 +117,20 @@ class SndpGraph():
     FLOAT_PERCENT_OF_LOC_WITH_END_PROD = 0.5 # this amount*num locations will be number bins in the problem
     INT_MAX_PRODUCTS_IN_ONE_LOCATION = 3  # might be higher under some conditions
     INT_MAX_DISTANCE = 5 # average is 3, too high value might lead to solution value = 0 (cost > sales)
-    FLOAT_MIN_SCENARIO_DEMAND = 1000
-    FLOAT_MAX_SCENARIO_DEMAND = 20000
 
     FLOAT_SALES_PRICE = 120 # in the initial instance it was 13
     FLOAT_PLANT_COST = 2000
     FLOAT_PLANT_CAPACITY =  5000
+    # min possible scenario demand = (1-FLOAT_MAX_PERCENT_DEMAND_DEFICIT) * FLOAT_PLANT_CAPACITY * number end product plants
+    # max possible scenario demand = 0.9 * FLOAT_PLANT_CAPACITY * number end product plants
+    FLOAT_MAX_PERCENT_DEMAND_DEFICIT = 0.5
 
     STR_PRODUCT_TYPE_MATERIAL = 'STR_PRODUCT_TYPE_MATERIAL'
     STR_PRODUCT_TYPE_END_PRODUCT = 'STR_PRODUCT_TYPE_END_PRODUCT'
 
     INT_MIN_MULTITHREAD_LOCATION_LIMIT = 2000 # we force num_cpu to be 1 if number_locations lower this value
     INT_MAX_LOCATIONS_TO_VISUALIZE = 40 # we will not run visualize() if the number of locations exceeds this value
-    INT_MIN_ITEMS_LOGGING = 250 # we provide completion long for some loops iterator of which has at least these number of itmes
+    INT_MIN_ITEMS_LOGGING = 500 # we provide completion long for some loops iterator of which has at least these number of itmes
 
 
     def __init__(self, name, num_locations, num_products, num_scen, random_seed = None):
@@ -334,12 +335,14 @@ class SndpGraph():
 
     def regenerate_stochastic_data(self, num_scen):
         start = time.time()
-        if num_scen > (SndpGraph.FLOAT_MAX_SCENARIO_DEMAND - SndpGraph.FLOAT_MIN_SCENARIO_DEMAND):
-            raise ValueError("SNDP_Graph.FLOAT_MAX_SCENARIO_DEMAND is too small for the num_scen.")
+        min_scenario_demand = (1-SndpGraph.FLOAT_MAX_PERCENT_DEMAND_DEFICIT) * SndpGraph.FLOAT_PLANT_CAPACITY * len(self.get_end_product_plants())
+        max_scenario_demand = 0.9 * SndpGraph.FLOAT_PLANT_CAPACITY * len(self.get_end_product_plants())
+        if num_scen > (max_scenario_demand - min_scenario_demand):
+            raise ValueError("SndpGraph.FLOAT_MAX_PERCENT_DEMAND_DEFICIT is too small for the num_scen.")
 
         self._scenarios_ = []
         probability_per_scenario = 1 / num_scen  # we assume uniformal distribution
-        demands = random.sample(range(SndpGraph.FLOAT_MIN_SCENARIO_DEMAND, SndpGraph.FLOAT_MAX_SCENARIO_DEMAND), num_scen)
+        demands = random.sample(range(int(min_scenario_demand), int(max_scenario_demand)), num_scen)
         for scenario_id in range(1, num_scen):  # indexing starts from 1, all scenarios except the last one
             self.add_scenario(_Scenario(scenario_id, probability_per_scenario, demands[scenario_id - 1]))
 
@@ -428,7 +431,7 @@ class SndpGraph():
                     arc_value_set.add(f'{location.id},{location.id}')
 
                 if len(end_product_plants) > SndpGraph.INT_MIN_ITEMS_LOGGING:
-                    print(f'Data transformed to dict for prouction arc {counter}/{len(end_product_plants)}')
+                    print(f'Data transformed to dict for production arc {counter}/{len(end_product_plants)}')
 
             data['ArcProduct'] = ArcProduct_value
 
