@@ -1,9 +1,19 @@
 import random
-import math
+import os
 import time
 from graphviz import Digraph
 import multiprocessing as mp
 import math
+
+def progress_bar(task: str, current: int, total: int, barLength = 20):
+    percent = float(current) * 100 / total
+    arrow   = '-' * int(percent/100 * barLength - 1) + '>'
+    spaces  = ' ' * (barLength - len(arrow))
+    bar_str = f'{task}: [{arrow}{spaces}] {current}/{total}'
+    if 'DEBUG_IN_PYCHARM' in os.environ and (current / 500).is_integer(): # end='r' does not work in PyCharm
+        print(bar_str, end='\n')
+    elif 'DEBUG_IN_PYCHARM' not in os.environ:
+        print(bar_str, end='\r')
 
 
 class _Product():
@@ -130,7 +140,6 @@ class SndpGraph():
 
     INT_MIN_MULTITHREAD_LOCATION_LIMIT = 2000 # we force num_cpu to be 1 if number_locations lower this value
     INT_MAX_LOCATIONS_TO_VISUALIZE = 40 # we will not run visualize() if the number of locations exceeds this value
-    INT_MIN_ITEMS_LOGGING = 500 # we provide completion long for some loops iterator of which has at least these number of itmes
 
 
     def __init__(self, name, num_locations, num_products, num_scen, random_seed = None):
@@ -240,8 +249,7 @@ class SndpGraph():
                     if not self.get_route(plant, end_product_plant):  # if the route does not already exist
                         self.add_route(_Route(plant, end_product_plant, random.randint(1, SndpGraph.INT_MAX_DISTANCE)))
 
-                if num_plants > SndpGraph.INT_MIN_ITEMS_LOGGING:
-                    print(f'Data generated for plant {plant.id}/{num_plants}')
+                progress_bar('Generate data for plants', plant.id, num_plants)
 
         # Test if graph is valid and solve the issues
         # - check if plant with material has at least one route to potential plant: this is guaranteed during assignment of materials to plants
@@ -265,8 +273,7 @@ class SndpGraph():
                     random_plant = end_product_plant
                 random_plant.add_product(material)
 
-            if len(end_product_plants) > SndpGraph.INT_MIN_ITEMS_LOGGING:
-                print(f'Data validated for plant {counter}/{len(end_product_plants)}')
+            progress_bar('Validate data for plants', counter, len(end_product_plants))
 
         end = time.time()
         print('{0} SNDP graph info generated for {1:0.3f} sec.'.format(self.name, end - start))
@@ -351,7 +358,7 @@ class SndpGraph():
         self.add_scenario(_Scenario(num_scen, left_probability, demands[num_scen - 1]))  # last scenario
         end = time.time()
 
-        print('{0} SNDP stochastic data generated for {1:0.3f} sec.'.format(self.name, end - start))
+        print('{0} SNDP stochastic data generated for {1} scenarios for {2:0.3f} sec.'.format(self.name, num_scen, end - start))
 
     def visualize(self, format='jpg', view=False, to_file=None):
         if len(self.get_locations()) > SndpGraph.INT_MAX_LOCATIONS_TO_VISUALIZE:
@@ -415,8 +422,7 @@ class SndpGraph():
                     ArcProduct_value.append({'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1})
                     arc_value_set.add(f'{route.start.id},{route.end.id}')
 
-                if len(routes) > SndpGraph.INT_MIN_ITEMS_LOGGING:
-                    print(f'Data transformed to dict for route {counter}/{len(routes)}')
+                progress_bar('Transform route data to dict', counter, len(routes))
 
             data['ShipCost'] = ShipCost_value
 
@@ -430,8 +436,7 @@ class SndpGraph():
                     ArcProduct_value.append({'product': product.id, 'start': location.id, 'finish': location.id, 'value': 1})
                     arc_value_set.add(f'{location.id},{location.id}')
 
-                if len(end_product_plants) > SndpGraph.INT_MIN_ITEMS_LOGGING:
-                    print(f'Data transformed to dict for production arc {counter}/{len(end_product_plants)}')
+                progress_bar('Transform product arc data to dict', counter, len(end_product_plants))
 
             data['ArcProduct'] = ArcProduct_value
 
