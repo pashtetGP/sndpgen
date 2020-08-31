@@ -4,7 +4,6 @@ import os
 INSTALL_REQUIRES = []
 INSTALL_REQUIRES.append('graphviz')
 INSTALL_REQUIRES.append('pyyaml')
-INSTALL_REQUIRES.append('opt_convert')
 
 license='MIT'
 if os.path.exists('LICENSE.txt'):

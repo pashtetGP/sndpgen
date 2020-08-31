@@ -4,6 +4,8 @@ import time
 from graphviz import Digraph
 import multiprocessing as mp
 import math
+from pkg_resources import resource_filename
+from pathlib import Path
 
 def progress_bar(task: str, current: int, total: int, barLength = 20):
     percent = float(current) * 100 / total
@@ -154,8 +156,12 @@ class SndpGraph():
         scalar_data_names = ['NrOfLocations','NrOfProducts','NrOfScen']
         list_data_names = ['MaterialReq','Prob','Demand','ShipCost','ArcProduct','arc']
         self._data = {name:None for name in scalar_data_names}
+        self._data_txt = {} # textual representation for .dat files
+        self._data_valid_export = {} # path to the .dat file that is actual for current data
         for name in list_data_names:
             self._data[name] = []
+            self._data_txt[name] = ''
+            self._data_valid_export[name] = None
         self._nodes_cache_cleared_ = True
         self._stochastic_data_cache_cleared_ = True
 
@@ -282,6 +288,11 @@ class SndpGraph():
         self._scenarios_ = []
         self.regenerate_stochastic_data(num_scen)
 
+    @property
+    def data_as_dict(self):
+        self._update_data_cache()
+        return self._data
+
     def generate_plant_data(self, worker_id, shared_add_routes, num_cpu = 0):
         '''Used in multiprocessing. Generates most of the data except the stochastic data'''
         random.seed(self.random_seed * worker_id+1) # +1 to avoid 0
@@ -391,20 +402,64 @@ class SndpGraph():
             to_file = self.name
         self.dot_graph.render(to_file, view=view)
 
-    def data_as_dict(self):
+    def export_mpl(self, filename : str):
+
+        self._update_data_cache()
+
+        progress_bar('Started export to .mpl     :', 1, 9)
+
+        # export .mpl file
+        model_formulation = Path(resource_filename(__name__, 'SNDP_default.mpl')).read_text()
+        # update links in the model formulation
+        model_formulation = model_formulation.replace('SNDP_default', filename)
+        Path(filename + '.mpl').write_text(model_formulation)
+
+        progress_bar('Started export scalar data :', 2, 9)
+        # export .dat files
+        # scalar
+        out_filename = f'{filename}_ScalarData.dat'
+        dat_file = Path(resource_filename(__name__, 'SNDP_default_ScalarData.dat')).read_text()
+        dat_file_lines = dat_file.split('\n')
+        for data_item_name in ['NrOfLocations', 'NrOfProducts', 'NrOfScen', 'SalesPrice', 'PlantCost', 'PlantCapacity']:
+            # load and modify the data from the current data file
+            data_row = dat_file_lines.index('!' + data_item_name) + 1
+            dat_file_lines[data_row] = str(self._data[data_item_name])
+        # and write to the new file
+        Path(out_filename).write_text('\n'.join(dat_file_lines))
+
+        # arrays
+        for counter, data_item_name in enumerate(['ShipCost', 'ArcProduct', 'arc', 'Prob', 'Demand', 'MaterialReq'], 1):
+            progress_bar(f'Started export {data_item_name}:', 2 + counter, 9)
+            out_filename = f'{filename}_{data_item_name}.dat'
+            if self._data_valid_export[data_item_name] is not None:
+                dat_contents = self._data_valid_export[data_item_name].read_text()
+            else:
+                keys = self._data[data_item_name][0].keys()
+                first_two_lines = '!{}\n!{}\n'.format(data_item_name, ','.join(keys))
+                dat_contents = first_two_lines + self._data_txt[data_item_name]
+            # and write to the new file
+            out_file = Path(out_filename)
+            out_file.write_text(dat_contents)
+            self._data_valid_export[data_item_name] = out_file
+
+        progress_bar(f'Finished export to .mpl:', 9, 9)
+
+    def _update_data_cache(self):
         data = self._data
+        data_txt = self._data_txt
 
         # Consts from class variables
         data['SalesPrice'] = SndpGraph.FLOAT_SALES_PRICE
         data['PlantCost'] = SndpGraph.FLOAT_PLANT_COST
         data['PlantCapacity'] = SndpGraph.FLOAT_PLANT_CAPACITY
 
-        if data['NrOfLocations'] is None: # never filled or was cleared
+        if data['NrOfLocations'] is None:  # never filled or was cleared
             data['NrOfLocations'] = len(self.get_locations())
         if data['NrOfProducts'] is None:
             data['NrOfProducts'] = len(self.get_products())
         if data['MaterialReq'] == []:
             data['MaterialReq'] = [{'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)]
+            data_txt['MaterialReq'] += '\n'.join([f'{i + 1},{k}' for (i, k) in enumerate(self.material_requirements)])
 
         if data['ShipCost'] == []:
             assert(data['ArcProduct'] == [] and data['arc'] == [] and "ShipCost, ArcProduct and arc should be cleared together")
@@ -415,14 +470,16 @@ class SndpGraph():
             routes = self.get_routes()
             for counter, route in enumerate(routes, 1):
                 ShipCost_value.append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
+                data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
                 # let us look at the routes and products delivered on them
                 for product in route.start.get_products():
                     if product != end_product and route.end == self.get_end_location():
                         continue
                     ArcProduct_value.append({'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1})
+                    data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
                     arc_value_set.add(f'{route.start.id},{route.end.id}')
 
-                progress_bar('Transform route data to dict', counter, len(routes))
+                progress_bar('Prepare route data for export', counter, len(routes))
 
             data['ShipCost'] = ShipCost_value
 
@@ -434,16 +491,21 @@ class SndpGraph():
                     if product == end_product:
                         continue
                     ArcProduct_value.append({'product': product.id, 'start': location.id, 'finish': location.id, 'value': 1})
+                    data_txt['ArcProduct'] += f'{product.id},{location.id},{location.id},1\n'
                     arc_value_set.add(f'{location.id},{location.id}')
 
-                progress_bar('Transform product arc data to dict', counter, len(end_product_plants))
+                progress_bar('Prepare ArcProduct data for export', counter, len(end_product_plants))
 
             data['ArcProduct'] = ArcProduct_value
 
             # decode arc value
             arc_value = []
-            for element in arc_value_set:
+            for counter, element in enumerate(arc_value_set):
                 arc_value.append({'start': element.split(',')[0], 'finish': element.split(',')[1]})
+                data_txt['arc'] += f'{element}\n'
+
+                progress_bar('Prepare arc data for export', counter, len(arc_value_set))
+
             data['arc'] = arc_value
 
         # stochastic data
@@ -453,11 +515,11 @@ class SndpGraph():
             data['NrOfScen'] = len(scenarios)
             data['Prob'] = [{'SCEN': scen.id, 'value': scen.probability} for scen in scenarios]
             data['Demand'] = [{'SCEN': scen.id, 'value': scen.demand} for scen in scenarios]
+            data_txt['Prob'] += '\n'.join([f'{scen.id},{scen.probability}' for scen in scenarios])
+            data_txt['Demand'] += '\n'.join([f'{scen.id},{scen.demand}' for scen in scenarios])
 
         self._nodes_cache_cleared_ = False
         self._stochastic_data_cache_cleared_ = False
-
-        return data
 
     def _clear_nodes_data_cache(self):
         if not self._nodes_cache_cleared_:
@@ -465,6 +527,8 @@ class SndpGraph():
                 self._data[name] = None
             for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
                 self._data[name] = []
+                self._data_txt[name] = ''
+                self._data_valid_export[name] = None
             self._nodes_cache_cleared_ = True
 
     def _clear_stochastic_data_cache(self):
@@ -473,6 +537,8 @@ class SndpGraph():
                 self._data[name] = None
             for name in ['Prob', 'Demand']:
                 self._data[name] = []
+                self._data_txt[name] = ''
+                self._data_valid_export[name] = None
             self._stochastic_data_cache_cleared_ = True
 
     def add_route(self, route):
