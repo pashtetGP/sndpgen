@@ -4,10 +4,6 @@ import os
 INSTALL_REQUIRES = []
 INSTALL_REQUIRES.append('graphviz')
 INSTALL_REQUIRES.append('pyyaml')
-INSTALL_REQUIRES.append('scipy') # for mplpy
-INSTALL_REQUIRES.append('matplotlib') # for mplpy
-INSTALL_REQUIRES.append('wxPython') # for mplpy
-INSTALL_REQUIRES.append('mplpy') # for opt_convert
 INSTALL_REQUIRES.append('opt_convert')
 
 license='MIT'
@@ -21,7 +17,7 @@ long_description = """
 
 setup(name='sndp_gen',
       version='0.0.1',
-      python_requires='=3.6', # does not work for some reason
+      python_requires='>=3.6', # does not work for some reason
       description='Converter for mathematical optimization formats: .mpl, .lp, .mps -> .mps, .lp, .xa, .mpl, mod etc.',
       long_description=long_description,
       keywords='converter mathematical optimization mps',
