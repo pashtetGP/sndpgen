@@ -235,11 +235,8 @@ class SndpGraph():
                     max_materials = len(self.get_materials())
                 random_num_materials = min(random.randint(min_materials, max_materials),
                                            SndpGraph.INT_MAX_PRODUCTS_IN_ONE_LOCATION)
-                if random_num_materials == 0:
+                if random_num_materials == 0: # no materials produced, lets go to the next plant
                     continue
-                random_materials = random_subset(self.get_materials(), random_num_materials)  # except the last one
-                for material in random_materials:
-                    plant.add_product(material)
 
                 # Define the route to (several or all) potential end product plants for every plant
                 random_num_end_product_plants = random.randint(1, len(end_product_plants))
@@ -254,6 +251,11 @@ class SndpGraph():
                         continue
                     if not self.get_route(plant, end_product_plant):  # if the route does not already exist
                         self.add_route(_Route(plant, end_product_plant, random.randint(1, SndpGraph.INT_MAX_DISTANCE)))
+
+                # Define materials to produce
+                random_materials = random_subset(self.get_materials(), random_num_materials)  # except the last one
+                for material in random_materials:
+                    plant.add_product(material)
 
                 progress_bar('Generate data for plants', plant.id, num_plants)
 
