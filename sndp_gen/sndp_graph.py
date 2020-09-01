@@ -56,10 +56,10 @@ class _Location():
     def add_product(self, product):
         if product in self.get_products():
             raise(f'Product {product} is already produced in location {self.id}')
-        product._graph = self._graph
-        self._graph._clear_nodes_data_cache()
+        assert(product._graph == self._graph)
         self._products.append(product)
         product.add_plant(self)
+        self.update_graph_data_cache(product)
 
     def get_products(self):
         return self._products[:]
@@ -79,6 +79,29 @@ class _Location():
 
     def get_outbounds(self):
         return self._outbounds[:]
+
+    def update_graph_data_cache(self, product = None):
+        self._graph._clear_nodes_data_cache()
+        if product is None:
+            products = self.get_products()
+        else:
+            products = [product]
+        for product in products:
+            end_location = self._graph.get_end_location()
+
+            for route in self.get_outbounds():
+                if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and route.end == end_location:
+                    continue
+                new_value = {'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1}
+                # TODO: make more efficient
+                if new_value not in self._graph._data['ArcProduct']:
+                    self._graph._data['ArcProduct'].append(new_value)
+                    self._graph._data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
+            if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and self in self._graph.get_end_product_plants():
+                new_value = {'product': product.id, 'start': self.id, 'finish': self.id, 'value': 1}
+                if new_value not in self._graph._data['ArcProduct']:
+                    self._graph._data['ArcProduct'].append(new_value)
+                    self._graph._data_txt['ArcProduct'] += f'{product.id},{self.id},{self.id},1\n'
 
     def __str__(self):
         if self.get_products():
@@ -186,9 +209,9 @@ class SndpGraph():
         plants_with_end_prod = random_subset(self.get_plants(), math.floor(num_locations * SndpGraph.FLOAT_PERCENT_OF_LOC_WITH_END_PROD))
         for plant in plants_with_end_prod:
             # end product (at least) should be produced there
-            plant.add_product(self.get_end_product())
             route_object = _Route(plant, self.get_end_location(), random.randint(1, SndpGraph.INT_MAX_DISTANCE))
             self.add_route(route_object)
+            plant.add_product(self.get_end_product())
 
         # Assign materials to plants and create routes
         #num_cpu = mp.cpu_count()
@@ -464,10 +487,10 @@ class SndpGraph():
             data['MaterialReq'] = [{'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)]
             data_txt['MaterialReq'] += '\n'.join([f'{i + 1},{k}' for (i, k) in enumerate(self.material_requirements)])
 
-        if data['ArcProduct'] == []: # as for now it should never happen because we generate this data in __init__
-            assert(data['ArcProduct'] == [] and data['arc'] == [] and "ShipCost, ArcProduct and arc should be cleared together")
+        if data['arc'] == []: # as for now it should never happen because we generate this data in __init__
+            assert(data['arc'] == [] and "ShipCost, ArcProduct and arc should be cleared together")
             #ShipCost_value = []
-            ArcProduct_value = [] # product, start, finish, 1
+            #ArcProduct_value = [] # product, start, finish, 1
             arc_value_set = set() # values should be distinct
             end_product = self.get_end_product()
             routes = self.get_routes()
@@ -478,8 +501,8 @@ class SndpGraph():
                 for product in route.start.get_products():
                     if product != end_product and route.end == self.get_end_location():
                         continue
-                    ArcProduct_value.append({'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1})
-                    data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
+                    #ArcProduct_value.append({'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1})
+                    #data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
                     arc_value_set.add(f'{route.start.id},{route.end.id}')
 
                 progress_bar('Prepare route data for export', counter, len(routes))
@@ -493,13 +516,13 @@ class SndpGraph():
                     # ship 344 should be only if 4 is the end product plant
                     if product == end_product:
                         continue
-                    ArcProduct_value.append({'product': product.id, 'start': location.id, 'finish': location.id, 'value': 1})
-                    data_txt['ArcProduct'] += f'{product.id},{location.id},{location.id},1\n'
+                    #ArcProduct_value.append({'product': product.id, 'start': location.id, 'finish': location.id, 'value': 1})
+                    #data_txt['ArcProduct'] += f'{product.id},{location.id},{location.id},1\n'
                     arc_value_set.add(f'{location.id},{location.id}')
 
                 progress_bar('Prepare ArcProduct data for export', counter, len(end_product_plants))
 
-            data['ArcProduct'] = ArcProduct_value
+            #data['ArcProduct'] = ArcProduct_value
 
             # decode arc value
             arc_value = []
@@ -529,7 +552,7 @@ class SndpGraph():
             for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
                 self._data[name] = None
             #for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
-            for name in ['ArcProduct', 'arc']:  # 'MaterialReq' are excluded since they cannot be modified:
+            for name in ['arc']:  # 'MaterialReq' are excluded since they cannot be modified:
                 self._data[name] = []
                 self._data_txt[name] = ''
                 self._data_valid_export[name] = None
@@ -548,9 +571,9 @@ class SndpGraph():
     def add_route(self, route):
         if self.get_route(route.start, route.end):
             raise ('Route already exists in the graph.')
-        self._clear_nodes_data_cache()
         route._graph = self
         self._routes_['{}-{}'.format(route.start.id, route.end.id)] = route
+        route.start.update_graph_data_cache()
         self._data['ShipCost'].append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
         self._data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
 
