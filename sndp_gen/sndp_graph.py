@@ -198,6 +198,7 @@ class SndpGraph():
 
         end_product_plants = self.get_end_product_plants()
         if num_cpu > 1: # multiprocessing
+            raise NotImplementedError('We need to fill in data cache here in the same manner as for single thread case.')
             add_products = [] # will store the changes to be applied
             manager = mp.Manager()
             # normal dict will not be shared among processes but we need it to be shared
@@ -463,16 +464,16 @@ class SndpGraph():
             data['MaterialReq'] = [{'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)]
             data_txt['MaterialReq'] += '\n'.join([f'{i + 1},{k}' for (i, k) in enumerate(self.material_requirements)])
 
-        if data['ShipCost'] == []:
+        if data['ArcProduct'] == []: # as for now it should never happen because we generate this data in __init__
             assert(data['ArcProduct'] == [] and data['arc'] == [] and "ShipCost, ArcProduct and arc should be cleared together")
-            ShipCost_value = []
+            #ShipCost_value = []
             ArcProduct_value = [] # product, start, finish, 1
             arc_value_set = set() # values should be distinct
             end_product = self.get_end_product()
             routes = self.get_routes()
             for counter, route in enumerate(routes, 1):
-                ShipCost_value.append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
-                data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
+                #ShipCost_value.append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
+                #data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
                 # let us look at the routes and products delivered on them
                 for product in route.start.get_products():
                     if product != end_product and route.end == self.get_end_location():
@@ -483,7 +484,7 @@ class SndpGraph():
 
                 progress_bar('Prepare route data for export', counter, len(routes))
 
-            data['ShipCost'] = ShipCost_value
+            #data['ShipCost'] = ShipCost_value
 
             # arcs for production
             end_product_plants = self.get_end_product_plants()
@@ -527,7 +528,8 @@ class SndpGraph():
         if not self._nodes_cache_cleared_:
             for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
                 self._data[name] = None
-            for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
+            #for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
+            for name in ['ArcProduct', 'arc']:  # 'MaterialReq' are excluded since they cannot be modified:
                 self._data[name] = []
                 self._data_txt[name] = ''
                 self._data_valid_export[name] = None
@@ -549,6 +551,8 @@ class SndpGraph():
         self._clear_nodes_data_cache()
         route._graph = self
         self._routes_['{}-{}'.format(route.start.id, route.end.id)] = route
+        self._data['ShipCost'].append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
+        self._data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
 
     def add_scenario(self, scenario):
         self._clear_stochastic_data_cache()
