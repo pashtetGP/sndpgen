@@ -222,8 +222,9 @@ class SndpGraph():
 
         # Nodes with end product
         self._routes = {}
-        plants_with_end_prod = random_subset(self.get_plants(), math.floor(num_locations * SndpGraph.FLOAT_PERCENT_OF_LOC_WITH_END_PROD))
-        for plant in plants_with_end_prod:
+        self._end_product_plants = set(random_subset(self.get_plants(), math.floor(num_locations * SndpGraph.FLOAT_PERCENT_OF_LOC_WITH_END_PROD))) # set it right away for efficiency
+        end_product_plants = self.get_end_product_plants()
+        for plant in end_product_plants:
             # end product (at least) should be produced there
             route_object = _Route(plant, self.get_end_location(), random.randint(1, SndpGraph.INT_MAX_DISTANCE))
             self.add_route(route_object)
@@ -235,7 +236,6 @@ class SndpGraph():
         if num_locations < SndpGraph.INT_MIN_MULTITHREAD_LOCATION_LIMIT:
             num_cpu = 1
 
-        end_product_plants = self.get_end_product_plants()
         if num_cpu > 1: # multiprocessing
             raise NotImplementedError('We need to fill in data cache here in the same manner as for single thread case.')
             add_products = [] # will store the changes to be applied
@@ -552,8 +552,6 @@ class SndpGraph():
 
     def get_product(self, id):
         product = self._products.get(id)
-        if product is None:
-            raise (f'Product with {id} was not found.')
         return product
 
     def get_end_product(self):
@@ -566,7 +564,7 @@ class SndpGraph():
         return self.get_locations()[:-1] # last location is end location
 
     def get_end_product_plants(self):
-        return [plant for plant in self.get_end_product().get_plants()]
+        return self._end_product_plants
 
     def get_location(self, id):
         location = self._locations.get(id)
