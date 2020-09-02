@@ -5,6 +5,10 @@ from sndp_gen import SndpGraph, Timer, parse_args, command_line
 
 class TestSndpGraph(TestCase):
 
+    @classmethod
+    def setUpClass(cls):
+        SndpGraph.DEBUG = True
+
     def test_init(self):
         num_locations = 5
         num_products = 5
@@ -49,6 +53,10 @@ class TestSndpGraph(TestCase):
 
 
 class TestCommandLine(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        SndpGraph.DEBUG = True
 
     def test_parse_args(self):
         filename = 'param.yaml'

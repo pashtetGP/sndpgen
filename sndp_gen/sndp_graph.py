@@ -1,5 +1,4 @@
 import random
-import os
 import time
 from graphviz import Digraph
 import multiprocessing as mp
@@ -70,9 +69,9 @@ def progress_bar(task: str, current: int, total: int, barLength = 20):
     arrow   = '-' * int(percent/100 * barLength - 1) + '>'
     spaces  = ' ' * (barLength - len(arrow))
     bar_str = f'{task}: [{arrow}{spaces}] {current}/{total}'
-    if 'DEBUG_IN_PYCHARM' in os.environ and (current / 500).is_integer(): # end='r' does not work in PyCharm
+    if SndpGraph.DEBUG and (current / 1).is_integer(): # end='r' does not work in PyCharm
         print(bar_str, end='\n')
-    elif 'DEBUG_IN_PYCHARM' not in os.environ:
+    else:
         print(bar_str, end='\r')
 
 
@@ -122,6 +121,8 @@ class _Location():
         assert(product._graph == self._graph)
         self._products.append(product)
         product.add_plant(self)
+        if product.type == SndpGraph.STR_PRODUCT_TYPE_END_PRODUCT:
+            self._graph._end_product_plants.add(self)
 
         # data cache
         self.update_graph_data_cache(product)
@@ -154,7 +155,6 @@ class _Location():
             routes = [route]
         for product in products:
             end_location = self._graph.get_end_location()
-
             for route in routes:
                 if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and route.end == end_location:
                     continue
@@ -238,11 +238,12 @@ class SndpGraph():
 
     INT_MIN_MULTITHREAD_LOCATION_LIMIT = 2000 # we force num_cpu to be 1 if number_locations lower this value
     INT_MAX_LOCATIONS_TO_VISUALIZE = 40 # we will not run visualize() if the number of locations exceeds this value
+    DEBUG = False
 
 
     def __init__(self, name, num_locations, num_products, num_scen, random_seed = None):
 
-        start = time.time()
+        Timer('Core data generated').start()
 
         self.name = name
         self.dot_graph = None
@@ -284,13 +285,14 @@ class SndpGraph():
 
         # Nodes with end product
         self._routes = {}
-        self._end_product_plants = set(random_subset(self.get_plants(), math.floor(num_locations * SndpGraph.FLOAT_PERCENT_OF_LOC_WITH_END_PROD))) # set it right away for efficiency
-        end_product_plants = self.get_end_product_plants()
-        for plant in end_product_plants:
+        plants_for_end_products = random_subset(self.get_plants(), math.floor(num_locations * SndpGraph.FLOAT_PERCENT_OF_LOC_WITH_END_PROD)) # set it right away for efficiency
+        self._end_product_plants = set()
+        for plant in plants_for_end_products:
             # end product (at least) should be produced there
             route_object = _Route(plant, self.get_end_location(), random.randint(1, SndpGraph.INT_MAX_DISTANCE))
             self.add_route(route_object)
             plant.add_product(self.get_end_product())
+        end_product_plants = self.get_end_product_plants()
 
         # Assign materials to plants and create routes
         #num_cpu = mp.cpu_count()
@@ -385,8 +387,8 @@ class SndpGraph():
 
             progress_bar('Validate data for plants', counter, len(end_product_plants))
 
-        end = time.time()
-        print('{0} SNDP graph info generated for {1:0.3f} sec.'.format(self.name, end - start))
+        str(Timer('Core data generated'))
+        Timer('Core data generated').reset()
 
         assert (self._data['NrOfLocations'] == num_locations)
         assert (self._data['NrOfLocations'] == len(self.get_locations()))
@@ -468,7 +470,7 @@ class SndpGraph():
         return add_products
 
     def regenerate_stochastic_data(self, num_scen):
-        start = time.time()
+        Timer('Stochastic data generated').start()
 
         self._clear_stochastic_data_cache()
         min_scenario_demand = (1-SndpGraph.FLOAT_MAX_PERCENT_DEMAND_DEFICIT) * SndpGraph.FLOAT_PLANT_CAPACITY * len(self.get_end_product_plants())
@@ -486,7 +488,8 @@ class SndpGraph():
         assert (left_probability > 0)
         self.add_scenario(_Scenario(num_scen, left_probability, demands[num_scen - 1]))  # last scenario
 
-        print('{0} SNDP stochastic data generated for {1} scenarios for {2:0.3f} sec.'.format(self.name, num_scen, time.time() - start))
+        print(Timer('Stochastic data generated'))
+        Timer('Stochastic data generated').reset()
 
         assert(self._data['NrOfScen'] == num_scen)
         assert (self._data['NrOfScen'] == len(self.get_scenarios()))
