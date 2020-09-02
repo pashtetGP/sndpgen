@@ -59,6 +59,8 @@ class _Location():
         assert(product._graph == self._graph)
         self._products.append(product)
         product.add_plant(self)
+
+        # data cache
         self.update_graph_data_cache(product)
 
     def get_products(self):
@@ -81,7 +83,7 @@ class _Location():
         return self._outbounds[:]
 
     def update_graph_data_cache(self, product = None):
-        self._graph._clear_nodes_data_cache()
+        self._graph._clear_nodes_data_cache() # TODO: delete clear_nodes_data_cache from everywhere
         if product is None:
             products = self.get_products()
         else:
@@ -97,11 +99,19 @@ class _Location():
                 if new_value not in self._graph._data['ArcProduct']:
                     self._graph._data['ArcProduct'].append(new_value)
                     self._graph._data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
+                    new_arc_value = {'start': route.start.id, 'finish': route.end.id}
+                    if new_arc_value not in  self._graph._data['arc']:
+                        self._graph._data['arc'].append(new_arc_value)
+                        self._graph._data_txt['arc'] += f'{route.start.id},{route.end.id}\n'
             if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and self in self._graph.get_end_product_plants():
                 new_value = {'product': product.id, 'start': self.id, 'finish': self.id, 'value': 1}
                 if new_value not in self._graph._data['ArcProduct']:
                     self._graph._data['ArcProduct'].append(new_value)
                     self._graph._data_txt['ArcProduct'] += f'{product.id},{self.id},{self.id},1\n'
+                    new_arc_value = {'start': self.id, 'finish': self.id}
+                    if new_arc_value not in self._graph._data['arc']:
+                        self._graph._data['arc'].append(new_arc_value)
+                        self._graph._data_txt['arc'] += f'{self.id},{self.id}\n'
 
     def __str__(self):
         if self.get_products():
@@ -471,6 +481,7 @@ class SndpGraph():
         progress_bar(f'Finished export to .mpl:', 9, 9)
 
     def _update_data_cache(self):
+        # TODO: delete this method
         data = self._data
         data_txt = self._data_txt
 
@@ -552,7 +563,7 @@ class SndpGraph():
             for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
                 self._data[name] = None
             #for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
-            for name in ['arc']:  # 'MaterialReq' are excluded since they cannot be modified:
+            for name in []:  # 'MaterialReq' are excluded since they cannot be modified:
                 self._data[name] = []
                 self._data_txt[name] = ''
                 self._data_valid_export[name] = None
@@ -573,6 +584,8 @@ class SndpGraph():
             raise ('Route already exists in the graph.')
         route._graph = self
         self._routes_['{}-{}'.format(route.start.id, route.end.id)] = route
+
+        # data cache
         route.start.update_graph_data_cache()
         self._data['ShipCost'].append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
         self._data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
