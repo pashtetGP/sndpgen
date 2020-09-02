@@ -2,7 +2,7 @@ from unittest import TestCase, TestLoader, TextTestRunner
 from pathlib import Path
 import sys
 from sndp_gen import SndpGraph, parse_args, command_line
-
+import time
 
 class TestSndpGraph(TestCase):
 
@@ -31,7 +31,7 @@ class TestSndpGraph(TestCase):
         num_products = 3
         num_scen = 2
         graph = SndpGraph('instance_name', num_locations, num_products, num_scen, 2)
-        data = graph.data_as_dict()
+        data = graph.data_as_dict
         self.assertEqual(data['NrOfLocations'], num_locations)
         self.assertEqual(data['NrOfProducts'], num_products)
         self.assertEqual(data['NrOfScen'], num_scen)
@@ -61,9 +61,11 @@ class TestCommandLine(TestCase):
         self.assertEqual(parsed.yaml, 'param.yaml')
 
     def test_command_line(self):
+        start = time.time()
         filename = 'param.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
         self.assertTrue(command_line())
+        print(f'\n***********\n***test_command_line took: {time.time() - start} seconds\n***********')
 
     def test_command_default_yaml(self):
         self.assertTrue(command_line())

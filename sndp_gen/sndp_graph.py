@@ -96,23 +96,22 @@ class _Location():
             for route in self.get_outbounds():
                 if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and route.end == end_location:
                     continue
-                new_value = {'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1}
-                # TODO: make more efficient
-                if new_value not in self._graph._data['ArcProduct']:
-                    self._graph._data['ArcProduct'].append(new_value)
-                    self._graph._data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
-                    new_arc_value = {'start': route.start.id, 'finish': route.end.id}
-                    if new_arc_value not in  self._graph._data['arc']:
-                        self._graph._data['arc'].append(new_arc_value)
-                        self._graph._data_txt['arc'] += f'{route.start.id},{route.end.id}\n'
+                new_arc_prod_key = f'{product.id},{route.start.id},{route.end.id}'
+                if new_arc_prod_key not in self._graph._data['ArcProduct']:
+                    self._graph._data['ArcProduct'][new_arc_prod_key] = {'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1}
+                    self._graph._data_txt['ArcProduct'] += f'{new_arc_prod_key},1\n'
+                    new_arc_key = f'{route.start.id},{route.end.id}'
+                    if new_arc_key not in self._graph._data['arc']:
+                        self._graph._data['arc'][new_arc_key] = {'start': route.start.id, 'finish': route.end.id}
+                        self._graph._data_txt['arc'] += f'{new_arc_key}\n'
             if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and self in self._graph.get_end_product_plants():
-                new_value = {'product': product.id, 'start': self.id, 'finish': self.id, 'value': 1}
-                if new_value not in self._graph._data['ArcProduct']:
-                    self._graph._data['ArcProduct'].append(new_value)
-                    self._graph._data_txt['ArcProduct'] += f'{product.id},{self.id},{self.id},1\n'
-                    new_arc_value = {'start': self.id, 'finish': self.id}
-                    if new_arc_value not in self._graph._data['arc']:
-                        self._graph._data['arc'].append(new_arc_value)
+                new_arc_prod_key = f'{product.id},{self.id},{self.id}'
+                if new_arc_prod_key not in self._graph._data['ArcProduct']:
+                    self._graph._data['ArcProduct'][new_arc_prod_key] = {'product': product.id, 'start': self.id, 'finish': self.id, 'value': 1}
+                    self._graph._data_txt['ArcProduct'] += f'{new_arc_prod_key},1\n'
+                    new_arc_key = f'{self.id},{self.id}'
+                    if new_arc_key not in self._graph._data['arc']:
+                        self._graph._data['arc'][new_arc_key] = {'start': self.id, 'finish': self.id}
                         self._graph._data_txt['arc'] += f'{self.id},{self.id}\n'
 
     def __str__(self):
@@ -200,7 +199,7 @@ class SndpGraph():
         self._data_txt = {} # textual representation for .dat files
         self._data_valid_export = {} # path to the .dat file that is actual for current data
         for name in list_data_names:
-            self._data[name] = []
+            self._data[name] = {}
             self._data_txt[name] = ''
             self._data_valid_export[name] = None
 
@@ -209,20 +208,20 @@ class SndpGraph():
             raise('There should be at least two products in the SNDP problem: material and end product.')
         if num_products > 40:
             print(f'If num products > 40, the instance might be disbalanced: production too expensive and solution value 0')
-        self._products_ = {product_id:_Product(product_id, self) for product_id in range(1, num_products + 1)}  # +1 since in MPL indexing starts from 1
+        self._products = {product_id:_Product(product_id, self) for product_id in range(1, num_products + 1)}  # +1 since in MPL indexing starts from 1
         self.get_products()[-1].type = SndpGraph.STR_PRODUCT_TYPE_END_PRODUCT # last product is end product
         max_material_req = math.floor(40/(num_products)*2) # in order to have moderate production costs
         self.material_requirements = [random.randint(1, max_material_req) for material in self.get_materials()] # in the end product
-        self._data['MaterialReq'] = [{'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)]
+        self._data['MaterialReq'] = {i: {'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)}
         self._data_txt['MaterialReq'] += '\n'.join([f'{i + 1},{k}' for (i, k) in enumerate(self.material_requirements)])
 
         # Initialize all locations
         if num_locations < 2:
             raise('There should be at least two locations in the SNDP problem: market and another location.')
-        self._locations_ = {location_id:_Location(location_id, self) for location_id in range(1, num_locations + 1)}
+        self._locations = {location_id:_Location(location_id, self) for location_id in range(1, num_locations + 1)}
 
         # Nodes with end product
-        self._routes_ = {}
+        self._routes = {}
         plants_with_end_prod = random_subset(self.get_plants(), math.floor(num_locations * SndpGraph.FLOAT_PERCENT_OF_LOC_WITH_END_PROD))
         for plant in plants_with_end_prod:
             # end product (at least) should be produced there
@@ -333,12 +332,20 @@ class SndpGraph():
         assert (self._data['NrOfProducts'] == len(self.get_products()))
 
         # Stochastic data
-        self._scenarios_ = [] # TODO: rename it
+        self._scenarios = []
         self.regenerate_stochastic_data(num_scen)
 
     @property
     def data_as_dict(self):
-        return self._data
+        result = {}
+        # scalar data
+        for name in ['NrOfLocations', 'NrOfProducts', 'NrOfScen', 'SalesPrice', 'PlantCost', 'PlantCapacity']:  # basically we do not need to clear it because it cannot be modified:
+            result[name] = self._data[name]
+        # array data
+        for name in ['MaterialReq', 'Prob', 'Demand', 'ShipCost', 'ArcProduct', 'arc']:  # 'MaterialReq' are excluded since they cannot be modified:
+            result[name] = list(self._data[name].values())
+
+        return result
 
     def generate_plant_data(self, worker_id, shared_add_routes, num_cpu = 0):
         '''Used in multiprocessing. Generates most of the data except the stochastic data'''
@@ -387,10 +394,10 @@ class SndpGraph():
                     continue
                 # routes can be one directional, omit the route if it already exists in another direction
                 key_opposite = '{}-{}'.format(end_product_plant.id, plant.id)
-                if self._routes_.get(key_opposite):
+                if self._routes.get(key_opposite):
                     continue
                 key = '{}-{}'.format(plant.id, end_product_plant.id)
-                if not self._routes_.get(key):  # if the route does not already exist
+                if not self._routes.get(key):  # if the route does not already exist
                     #self.add_route(Route(plant, end_product_plant, random.randint(1, SNDP_Graph.MAX_DISTANCE)))
                     shared_add_routes[key] = random.randint(1, SndpGraph.INT_MAX_DISTANCE)
 
@@ -407,7 +414,7 @@ class SndpGraph():
         if num_scen > (max_scenario_demand - min_scenario_demand):
             raise ValueError("SndpGraph.FLOAT_MAX_PERCENT_DEMAND_DEFICIT is too small for the num_scen.")
 
-        self._scenarios_ = []
+        self._scenarios = []
         probability_per_scenario = 1 / num_scen  # we assume uniformal distribution
         demands = random.sample(range(int(min_scenario_demand), int(max_scenario_demand)), num_scen)
         for scenario_id in range(1, num_scen):  # indexing starts from 1, all scenarios except the last one
@@ -483,7 +490,8 @@ class SndpGraph():
             if self._data_valid_export[data_item_name] is not None:
                 dat_contents = self._data_valid_export[data_item_name].read_text()
             else:
-                keys = self._data[data_item_name][0].keys()
+                some_value = next(iter(self._data[data_item_name].values())) # we get dict
+                keys = some_value.keys()
                 first_two_lines = '!{}\n!{}\n'.format(data_item_name, ','.join(keys))
                 dat_contents = first_two_lines + self._data_txt[data_item_name]
             # and write to the new file
@@ -497,7 +505,7 @@ class SndpGraph():
         for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
             self._data[name] = 0
         for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
-            self._data[name] = []
+            self._data[name] = {}
             self._data_txt[name] = ''
             self._data_valid_export[name] = None
 
@@ -505,41 +513,45 @@ class SndpGraph():
         for name in ['NrOfScen']:
             self._data[name] = 0
         for name in ['Prob', 'Demand']:
-            self._data[name] = []
+            self._data[name] = {}
             self._data_txt[name] = ''
             self._data_valid_export[name] = None
 
     def add_route(self, route):
         if self.get_route(route.start, route.end):
-            raise ('Route already exists in the graph.')
+            raise KeyError('Route already exists in the graph.')
         route._graph = self
-        self._routes_['{}-{}'.format(route.start.id, route.end.id)] = route
+        self._routes['{}-{}'.format(route.start.id, route.end.id)] = route
 
         # data cache
         route.start.update_graph_data_cache()
-        self._data['ShipCost'].append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
-        self._data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
+        # we check for duplicates above
+        new_key = f'{route.start.id},{route.end.id}'
+        self._data['ShipCost'][new_key] = {'start': route.start.id, 'finish': route.end.id, 'value': route.distance}
+        self._data_txt['ShipCost'] += f'{new_key},{route.distance}\n'
 
     def add_scenario(self, scenario):
         scenario._graph = self
-        self._scenarios_.append(scenario)
+        self._scenarios.append(scenario)
 
         # data cache
         self._data['NrOfScen'] += 1
-        # TODO: error if try to add existing scenario
-        self._data['Prob'].append({'SCEN': scenario.id, 'value': scenario.probability})
+        if scenario.id in self._data['Prob']:
+            raise KeyError('Scenario already exists in the graph.')
+        assert(scenario.id not in self._data['Demand'] and 'How would this happen if error obove does not raise?')
+        self._data['Prob'][scenario.id] = {'SCEN': scenario.id, 'value': scenario.probability}
         self._data_txt['Prob'] += f'{scenario.id},{scenario.probability}\n'
-        self._data['Demand'].append({'SCEN': scenario.id, 'value': scenario.demand})
+        self._data['Demand'][scenario.id] = {'SCEN': scenario.id, 'value': scenario.demand}
         self._data_txt['Demand'] += f'{scenario.id},{scenario.demand}\n'
 
     def get_products(self):
-        return list(self._products_.values())
+        return list(self._products.values())
 
     def get_materials(self):
         return self.get_products()[:-1]  # all except the last products which are the end product
 
     def get_product(self, id):
-        product = self._products_.get(id)
+        product = self._products.get(id)
         if product is None:
             raise (f'Product with {id} was not found.')
         return product
@@ -548,7 +560,7 @@ class SndpGraph():
         return self.get_products()[-1]
 
     def get_locations(self):
-        return list(self._locations_.values())
+        return list(self._locations.values())
 
     def get_plants(self):
         return self.get_locations()[:-1] # last location is end location
@@ -557,7 +569,7 @@ class SndpGraph():
         return [plant for plant in self.get_end_product().get_plants()]
 
     def get_location(self, id):
-        location = self._locations_.get(id)
+        location = self._locations.get(id)
         if location is None:
             raise (f'Location with {id} was not found.')
         return location
@@ -566,16 +578,16 @@ class SndpGraph():
         return self.get_locations()[-1]
 
     def get_routes(self):
-        return list(self._routes_.values())
+        return list(self._routes.values())
 
     def get_route(self, start, end):
         if not isinstance(start, _Location) or not isinstance(end, _Location):
             raise('Start and end arguments should be Location objects')
         key = '{}-{}'.format(start.id, end.id)
-        return self._routes_.get(key)
+        return self._routes.get(key)
 
     def get_scenarios(self):
-        return self._scenarios_[:]
+        return self._scenarios[:]
 
 def random_subset( iterator, K ):
     result = []

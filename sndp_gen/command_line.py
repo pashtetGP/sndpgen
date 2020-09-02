@@ -2,7 +2,6 @@ import argparse
 import sys
 from pathlib import Path
 import yaml
-from pkg_resources import resource_filename
 from sndp_gen import SndpGraph
 
 def parse_args(args):
