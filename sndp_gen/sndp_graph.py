@@ -25,11 +25,13 @@ class _Product():
         self.type = SndpGraph.STR_PRODUCT_TYPE_MATERIAL
         self._plants = [] # plants where it is being manufactures
 
+        #data cache
+        self._graph._data['NrOfProducts'] += 1
+
     def add_plant(self, plant):
         if plant in self.get_plants():
             raise ('Plant {} is already in the list of plants of Product {}.'.format(plant.id, self.id))
         plant._graph = self._graph
-        self._graph._clear_nodes_data_cache()
         self._plants.append(plant)
 
     def get_plants(self):
@@ -53,6 +55,9 @@ class _Location():
         self._inbounds = [] # inbound routes
         self._outbounds = []  # outbound routes
 
+        # data cache
+        self._graph._data['NrOfLocations'] += 1
+
     def add_product(self, product):
         if product in self.get_products():
             raise(f'Product {product} is already produced in location {self.id}')
@@ -68,7 +73,6 @@ class _Location():
 
     def add_inbound(self, route):
         route._graph = self._graph
-        self._graph._clear_nodes_data_cache()
         self._inbounds.append(route)
 
     def get_inbounds(self):
@@ -76,14 +80,12 @@ class _Location():
 
     def add_outbound(self, route):
         route._graph = self._graph
-        self._graph._clear_nodes_data_cache()
         self._outbounds.append(route)
 
     def get_outbounds(self):
         return self._outbounds[:]
 
     def update_graph_data_cache(self, product = None):
-        self._graph._clear_nodes_data_cache() # TODO: delete clear_nodes_data_cache from everywhere
         if product is None:
             products = self.get_products()
         else:
@@ -182,21 +184,25 @@ class SndpGraph():
         start = time.time()
 
         self.name = name
+        self.dot_graph = None
         self.random_seed = random_seed
         random.seed(random_seed)
 
         # Initialize data cache
-        scalar_data_names = ['NrOfLocations','NrOfProducts','NrOfScen']
+        self._data = {}
+        self._data['SalesPrice'] = SndpGraph.FLOAT_SALES_PRICE
+        self._data['PlantCost'] = SndpGraph.FLOAT_PLANT_COST
+        self._data['PlantCapacity'] = SndpGraph.FLOAT_PLANT_CAPACITY
+        self._data['NrOfLocations'] = 0
+        self._data['NrOfProducts'] = 0
+
         list_data_names = ['MaterialReq','Prob','Demand','ShipCost','ArcProduct','arc']
-        self._data = {name:None for name in scalar_data_names}
         self._data_txt = {} # textual representation for .dat files
         self._data_valid_export = {} # path to the .dat file that is actual for current data
         for name in list_data_names:
             self._data[name] = []
             self._data_txt[name] = ''
             self._data_valid_export[name] = None
-        self._nodes_cache_cleared_ = True
-        self._stochastic_data_cache_cleared_ = True
 
         # Initialize products
         if num_products < 2:
@@ -207,7 +213,8 @@ class SndpGraph():
         self.get_products()[-1].type = SndpGraph.STR_PRODUCT_TYPE_END_PRODUCT # last product is end product
         max_material_req = math.floor(40/(num_products)*2) # in order to have moderate production costs
         self.material_requirements = [random.randint(1, max_material_req) for material in self.get_materials()] # in the end product
-        self.dot_graph = None
+        self._data['MaterialReq'] = [{'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)]
+        self._data_txt['MaterialReq'] += '\n'.join([f'{i + 1},{k}' for (i, k) in enumerate(self.material_requirements)])
 
         # Initialize all locations
         if num_locations < 2:
@@ -320,13 +327,17 @@ class SndpGraph():
         end = time.time()
         print('{0} SNDP graph info generated for {1:0.3f} sec.'.format(self.name, end - start))
 
+        assert (self._data['NrOfLocations'] == num_locations)
+        assert (self._data['NrOfLocations'] == len(self.get_locations()))
+        assert (self._data['NrOfProducts'] == num_products)
+        assert (self._data['NrOfProducts'] == len(self.get_products()))
+
         # Stochastic data
-        self._scenarios_ = []
+        self._scenarios_ = [] # TODO: rename it
         self.regenerate_stochastic_data(num_scen)
 
     @property
     def data_as_dict(self):
-        self._update_data_cache()
         return self._data
 
     def generate_plant_data(self, worker_id, shared_add_routes, num_cpu = 0):
@@ -389,6 +400,8 @@ class SndpGraph():
 
     def regenerate_stochastic_data(self, num_scen):
         start = time.time()
+
+        self._clear_stochastic_data_cache()
         min_scenario_demand = (1-SndpGraph.FLOAT_MAX_PERCENT_DEMAND_DEFICIT) * SndpGraph.FLOAT_PLANT_CAPACITY * len(self.get_end_product_plants())
         max_scenario_demand = 0.9 * SndpGraph.FLOAT_PLANT_CAPACITY * len(self.get_end_product_plants())
         if num_scen > (max_scenario_demand - min_scenario_demand):
@@ -403,9 +416,11 @@ class SndpGraph():
         left_probability = 1.0 - sum(scen.probability for scen in self.get_scenarios())
         assert (left_probability > 0)
         self.add_scenario(_Scenario(num_scen, left_probability, demands[num_scen - 1]))  # last scenario
-        end = time.time()
 
-        print('{0} SNDP stochastic data generated for {1} scenarios for {2:0.3f} sec.'.format(self.name, num_scen, end - start))
+        print('{0} SNDP stochastic data generated for {1} scenarios for {2:0.3f} sec.'.format(self.name, num_scen, time.time() - start))
+
+        assert(self._data['NrOfScen'] == num_scen)
+        assert (self._data['NrOfScen'] == len(self.get_scenarios()))
 
     def visualize(self, format='jpg', view=False, to_file=None):
         if len(self.get_locations()) > SndpGraph.INT_MAX_LOCATIONS_TO_VISUALIZE:
@@ -439,8 +454,6 @@ class SndpGraph():
         self.dot_graph.render(to_file, view=view)
 
     def export_mpl(self, filename : str):
-
-        self._update_data_cache()
 
         progress_bar('Started export to .mpl     :', 1, 9)
 
@@ -480,104 +493,21 @@ class SndpGraph():
 
         progress_bar(f'Finished export to .mpl:', 9, 9)
 
-    def _update_data_cache(self):
-        # TODO: delete this method
-        data = self._data
-        data_txt = self._data_txt
-
-        # Consts from class variables
-        data['SalesPrice'] = SndpGraph.FLOAT_SALES_PRICE
-        data['PlantCost'] = SndpGraph.FLOAT_PLANT_COST
-        data['PlantCapacity'] = SndpGraph.FLOAT_PLANT_CAPACITY
-
-        if data['NrOfLocations'] is None:  # never filled or was cleared
-            data['NrOfLocations'] = len(self.get_locations())
-        if data['NrOfProducts'] is None:
-            data['NrOfProducts'] = len(self.get_products())
-        if data['MaterialReq'] == []:
-            data['MaterialReq'] = [{'material': i + 1, 'value': k} for (i, k) in enumerate(self.material_requirements)]
-            data_txt['MaterialReq'] += '\n'.join([f'{i + 1},{k}' for (i, k) in enumerate(self.material_requirements)])
-
-        if data['arc'] == []: # as for now it should never happen because we generate this data in __init__
-            assert(data['arc'] == [] and "ShipCost, ArcProduct and arc should be cleared together")
-            #ShipCost_value = []
-            #ArcProduct_value = [] # product, start, finish, 1
-            arc_value_set = set() # values should be distinct
-            end_product = self.get_end_product()
-            routes = self.get_routes()
-            for counter, route in enumerate(routes, 1):
-                #ShipCost_value.append({'start': route.start.id, 'finish': route.end.id, 'value': route.distance})
-                #data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
-                # let us look at the routes and products delivered on them
-                for product in route.start.get_products():
-                    if product != end_product and route.end == self.get_end_location():
-                        continue
-                    #ArcProduct_value.append({'product': product.id, 'start': route.start.id, 'finish': route.end.id, 'value': 1})
-                    #data_txt['ArcProduct'] += f'{product.id},{route.start.id},{route.end.id},1\n'
-                    arc_value_set.add(f'{route.start.id},{route.end.id}')
-
-                progress_bar('Prepare route data for export', counter, len(routes))
-
-            #data['ShipCost'] = ShipCost_value
-
-            # arcs for production
-            end_product_plants = self.get_end_product_plants()
-            for counter, location in enumerate(end_product_plants, 1):
-                for product in location.get_products():
-                    # ship 344 should be only if 4 is the end product plant
-                    if product == end_product:
-                        continue
-                    #ArcProduct_value.append({'product': product.id, 'start': location.id, 'finish': location.id, 'value': 1})
-                    #data_txt['ArcProduct'] += f'{product.id},{location.id},{location.id},1\n'
-                    arc_value_set.add(f'{location.id},{location.id}')
-
-                progress_bar('Prepare ArcProduct data for export', counter, len(end_product_plants))
-
-            #data['ArcProduct'] = ArcProduct_value
-
-            # decode arc value
-            arc_value = []
-            for counter, element in enumerate(arc_value_set):
-                arc_value.append({'start': element.split(',')[0], 'finish': element.split(',')[1]})
-                data_txt['arc'] += f'{element}\n'
-
-                progress_bar('Prepare arc data for export', counter, len(arc_value_set))
-
-            data['arc'] = arc_value
-
-        # stochastic data
-        if data['NrOfScen'] is None:
-            assert(data['Prob'] == [] and data['Demand'] == [] and "NrOfScen, Prob and Demand should be cleared together")
-            scenarios = self.get_scenarios()
-            data['NrOfScen'] = len(scenarios)
-            data['Prob'] = [{'SCEN': scen.id, 'value': scen.probability} for scen in scenarios]
-            data['Demand'] = [{'SCEN': scen.id, 'value': scen.demand} for scen in scenarios]
-            data_txt['Prob'] += '\n'.join([f'{scen.id},{scen.probability}' for scen in scenarios])
-            data_txt['Demand'] += '\n'.join([f'{scen.id},{scen.demand}' for scen in scenarios])
-
-        self._nodes_cache_cleared_ = False
-        self._stochastic_data_cache_cleared_ = False
-
     def _clear_nodes_data_cache(self):
-        if not self._nodes_cache_cleared_:
-            for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
-                self._data[name] = None
-            #for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
-            for name in []:  # 'MaterialReq' are excluded since they cannot be modified:
-                self._data[name] = []
-                self._data_txt[name] = ''
-                self._data_valid_export[name] = None
-            self._nodes_cache_cleared_ = True
+        for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
+            self._data[name] = 0
+        for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
+            self._data[name] = []
+            self._data_txt[name] = ''
+            self._data_valid_export[name] = None
 
     def _clear_stochastic_data_cache(self):
-        if not self._stochastic_data_cache_cleared_:
-            for name in ['NrOfScen']:
-                self._data[name] = None
-            for name in ['Prob', 'Demand']:
-                self._data[name] = []
-                self._data_txt[name] = ''
-                self._data_valid_export[name] = None
-            self._stochastic_data_cache_cleared_ = True
+        for name in ['NrOfScen']:
+            self._data[name] = 0
+        for name in ['Prob', 'Demand']:
+            self._data[name] = []
+            self._data_txt[name] = ''
+            self._data_valid_export[name] = None
 
     def add_route(self, route):
         if self.get_route(route.start, route.end):
@@ -591,9 +521,16 @@ class SndpGraph():
         self._data_txt['ShipCost'] += f'{route.start.id},{route.end.id},{route.distance}\n'
 
     def add_scenario(self, scenario):
-        self._clear_stochastic_data_cache()
         scenario._graph = self
         self._scenarios_.append(scenario)
+
+        # data cache
+        self._data['NrOfScen'] += 1
+        # TODO: error if try to add existing scenario
+        self._data['Prob'].append({'SCEN': scenario.id, 'value': scenario.probability})
+        self._data_txt['Prob'] += f'{scenario.id},{scenario.probability}\n'
+        self._data['Demand'].append({'SCEN': scenario.id, 'value': scenario.demand})
+        self._data_txt['Demand'] += f'{scenario.id},{scenario.demand}\n'
 
     def get_products(self):
         return list(self._products_.values())
