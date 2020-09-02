@@ -143,15 +143,19 @@ class _Location():
     def get_outbounds(self):
         return self._outbounds[:]
 
-    def update_graph_data_cache(self, product = None):
+    def update_graph_data_cache(self, product = None, route = None):
         if product is None:
             products = self.get_products()
         else:
             products = [product]
+        if route is None:
+            routes = self.get_outbounds()
+        else:
+            routes = [route]
         for product in products:
             end_location = self._graph.get_end_location()
 
-            for route in self.get_outbounds():
+            for route in routes:
                 if product.type == SndpGraph.STR_PRODUCT_TYPE_MATERIAL and route.end == end_location:
                     continue
                 new_arc_prod_key = f'{product.id},{route.start.id},{route.end.id}'
@@ -582,7 +586,7 @@ class SndpGraph():
         self._routes['{}-{}'.format(route.start.id, route.end.id)] = route
 
         # data cache
-        route.start.update_graph_data_cache()
+        route.start.update_graph_data_cache(product = None, route = route)
         # we check for duplicates above
         new_key = f'{route.start.id},{route.end.id}'
         self._data['ShipCost'][new_key] = {'start': route.start.id, 'finish': route.end.id, 'value': route.distance}
