@@ -1,8 +1,7 @@
 from unittest import TestCase, TestLoader, TextTestRunner
 from pathlib import Path
 import sys
-from sndp_gen import SndpGraph, parse_args, command_line
-import time
+from sndp_gen import SndpGraph, Timer, parse_args, command_line
 
 class TestSndpGraph(TestCase):
 
@@ -61,11 +60,12 @@ class TestCommandLine(TestCase):
         self.assertEqual(parsed.yaml, 'param.yaml')
 
     def test_command_line(self):
-        start = time.time()
+        Timer('test_command_line').start()
         filename = 'param.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
         self.assertTrue(command_line())
-        print(f'\n***********\n***test_command_line took: {time.time() - start} seconds\n***********')
+        Timer('test_command_line').pause()
+        Timer.report()
 
     def test_command_default_yaml(self):
         self.assertTrue(command_line())

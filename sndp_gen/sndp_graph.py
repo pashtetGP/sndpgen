@@ -7,6 +7,64 @@ import math
 from pkg_resources import resource_filename
 from pathlib import Path
 
+class Timer:
+    _timers = {}
+
+    @classmethod
+    def reset_all(cls):
+        for timer in cls._timers.values():
+            timer.reset()
+
+    @classmethod
+    def report(cls):
+        print('Timer: total elapsed time, sec')
+        for timer_label in sorted(cls._timers.keys()):
+            print(cls._timers[timer_label])
+
+    def __init__(self, label):
+       if label in self._timers: # we already have such timer
+            current_timer = self._timers[label]
+            self._current_start = current_timer._current_start
+            self._previous_elapsed = current_timer._previous_elapsed
+            self._label = label
+            self._timers[label] = self
+       else:
+            self._current_start = None
+            self._previous_elapsed = 0
+            self._label = label
+            self._timers[label] = self
+
+
+    @property
+    def elapsed_time(self): # total elapsed time
+        if self._current_start is None: # timer is not running
+            return self._previous_elapsed
+        else:
+            return self._previous_elapsed + (time.perf_counter() - self._current_start)
+
+    def start(self):
+        if self._current_start is not None:
+            raise RuntimeError(f"Timer is running. Use .pause() to stop it")
+
+        self._current_start = time.perf_counter()
+
+    def pause(self):
+        if self._current_start is None:
+            raise RuntimeError(f"Timer is not running. Use .unpause() to start it")
+
+        self._previous_elapsed += time.perf_counter() - self._current_start
+        self._current_start = None
+
+    def reset(self):
+        self._current_start = None
+        self._previous_elapsed = 0
+
+    def __repr__(self):
+        return f'{self._label}: {self.elapsed_time:0.4f}'
+
+    def __str__(self):
+        return self.__repr__()
+
 def progress_bar(task: str, current: int, total: int, barLength = 20):
     percent = float(current) * 100 / total
     arrow   = '-' * int(percent/100 * barLength - 1) + '>'
