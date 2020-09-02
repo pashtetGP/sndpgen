@@ -125,6 +125,8 @@ class _Location():
             self._graph._end_product_plants.add(self)
 
         # data cache
+        for name in ['ScalarData', 'ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
+            self._graph._data_valid_export[name] = None
         self.update_graph_data_cache(product)
 
     def get_products(self):
@@ -257,10 +259,10 @@ class SndpGraph():
         self._data['PlantCapacity'] = SndpGraph.FLOAT_PLANT_CAPACITY
         self._data['NrOfLocations'] = 0
         self._data['NrOfProducts'] = 0
+        self._data_valid_export = {'ScalarData': None}  # path to the .dat file that is actual for current data
 
         list_data_names = ['MaterialReq','Prob','Demand','ShipCost','ArcProduct','arc']
         self._data_txt = {} # textual representation for .dat files
-        self._data_valid_export = {} # path to the .dat file that is actual for current data
         for name in list_data_names:
             self._data[name] = {}
             self._data_txt[name] = ''
@@ -527,46 +529,51 @@ class SndpGraph():
 
     def export_mpl(self, filename : str):
 
-        progress_bar('Started export to .mpl     :', 1, 9)
-
         # export .mpl file
         model_formulation = Path(resource_filename(__name__, 'SNDP_default.mpl')).read_text()
-        # update links in the model formulation
-        model_formulation = model_formulation.replace('SNDP_default', filename)
-        Path(filename + '.mpl').write_text(model_formulation)
 
-        progress_bar('Started export scalar data :', 2, 9)
         # export .dat files
         # scalar
-        out_filename = f'{filename}_ScalarData.dat'
-        dat_file = Path(resource_filename(__name__, 'SNDP_default_ScalarData.dat')).read_text()
-        dat_file_lines = dat_file.split('\n')
-        for data_item_name in ['NrOfLocations', 'NrOfProducts', 'NrOfScen', 'SalesPrice', 'PlantCost', 'PlantCapacity']:
-            # load and modify the data from the current data file
-            data_row = dat_file_lines.index('!' + data_item_name) + 1
-            dat_file_lines[data_row] = str(self._data[data_item_name])
-        # and write to the new file
-        Path(out_filename).write_text('\n'.join(dat_file_lines))
+        valid_export = self._data_valid_export['ScalarData']
+        if valid_export is not None:
+            out_filename = str(valid_export)
+        else:
+            out_filename = f'{filename}_ScalarData.dat'
+            dat_file = Path(resource_filename(__name__, 'SNDP_default_ScalarData.dat')).read_text()
+            dat_file_lines = dat_file.split('\n')
+            for data_item_name in ['NrOfLocations', 'NrOfProducts', 'NrOfScen', 'SalesPrice', 'PlantCost', 'PlantCapacity']:
+                # load and modify the data from the current data file
+                data_row = dat_file_lines.index('!' + data_item_name) + 1
+                dat_file_lines[data_row] = str(self._data[data_item_name])
+            # and write to the new file
+            out_file = Path(out_filename)
+            out_file.write_text('\n'.join(dat_file_lines))
+            self._data_valid_export['ScalarData'] = out_file
+        # update links in the model formulation
+        model_formulation = model_formulation.replace(f'SNDP_default_ScalarData.dat', str(out_filename))
 
         # arrays
-        for counter, data_item_name in enumerate(['ShipCost', 'ArcProduct', 'arc', 'Prob', 'Demand', 'MaterialReq'], 1):
-            progress_bar(f'Started export {data_item_name}:', 2 + counter, 9)
-            out_filename = f'{filename}_{data_item_name}.dat'
-            if self._data_valid_export[data_item_name] is not None:
-                dat_contents = self._data_valid_export[data_item_name].read_text()
+        for data_item_name in ['ShipCost', 'ArcProduct', 'arc', 'Prob', 'Demand', 'MaterialReq']:
+            valid_export = self._data_valid_export[data_item_name]
+            if valid_export is not None:
+                out_filename = str(valid_export)
             else:
+                out_filename = f'{filename}_{data_item_name}.dat'
                 some_value = next(iter(self._data[data_item_name].values())) # we get dict
                 keys = some_value.keys()
                 first_two_lines = '!{}\n!{}\n'.format(data_item_name, ','.join(keys))
                 dat_contents = first_two_lines + self._data_txt[data_item_name]
-            # and write to the new file
-            out_file = Path(out_filename)
-            out_file.write_text(dat_contents)
-            self._data_valid_export[data_item_name] = out_file
+                # and write to the new file
+                out_file = Path(out_filename)
+                out_file.write_text(dat_contents)
+                self._data_valid_export[data_item_name] = out_file
+            # update links in the model formulation
+            model_formulation = model_formulation.replace(f'SNDP_default_{data_item_name}.dat', str(out_filename))
 
-        progress_bar(f'Finished export to .mpl:', 9, 9)
+        Path(filename + '.mpl').write_text(model_formulation)
 
     def _clear_nodes_data_cache(self):
+        self._data_valid_export['ScalarData'] = None
         for name in ['NrOfLocations', 'NrOfProducts']: # basically we do not need to clear it because it cannot be modified:
             self._data[name] = 0
         for name in ['ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
@@ -575,6 +582,7 @@ class SndpGraph():
             self._data_valid_export[name] = None
 
     def _clear_stochastic_data_cache(self):
+        self._data_valid_export['ScalarData'] = None
         for name in ['NrOfScen']:
             self._data[name] = 0
         for name in ['Prob', 'Demand']:
@@ -589,6 +597,8 @@ class SndpGraph():
         self._routes['{}-{}'.format(route.start.id, route.end.id)] = route
 
         # data cache
+        for name in ['ScalarData', 'ShipCost', 'ArcProduct', 'arc']: # 'MaterialReq' are excluded since they cannot be modified:
+            self._data_valid_export[name] = None
         route.start.update_graph_data_cache(product = None, route = route)
         # we check for duplicates above
         new_key = f'{route.start.id},{route.end.id}'
