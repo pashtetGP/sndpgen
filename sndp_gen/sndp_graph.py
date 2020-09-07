@@ -3,8 +3,10 @@ import time
 from graphviz import Digraph
 import multiprocessing as mp
 import math
+from warnings import warn
 from pkg_resources import resource_filename
 from pathlib import Path
+
 
 class Timer:
     _timers = {}
@@ -228,7 +230,7 @@ class SndpGraph():
     INT_MAX_PRODUCTS_IN_ONE_LOCATION = 3  # might be higher under some conditions
     INT_MAX_DISTANCE = 5 # average is 3, too high value might lead to solution value = 0 (cost > sales)
 
-    FLOAT_SALES_PRICE = 120 # in the initial instance it was 13
+    FLOAT_INIT_SALES_PRICE = 120 # in the initial instance it was 13. Might be adjusted with adjust_sales_price
     FLOAT_PLANT_COST = 2000
     FLOAT_PLANT_CAPACITY =  5000
     # min possible scenario demand = (1-FLOAT_MAX_PERCENT_DEMAND_DEFICIT) * FLOAT_PLANT_CAPACITY * number end product plants
@@ -254,7 +256,7 @@ class SndpGraph():
 
         # Initialize data cache
         self._data = {}
-        self._data['SalesPrice'] = SndpGraph.FLOAT_SALES_PRICE
+        self.sales_price = SndpGraph.FLOAT_INIT_SALES_PRICE
         self._data['PlantCost'] = SndpGraph.FLOAT_PLANT_COST
         self._data['PlantCapacity'] = SndpGraph.FLOAT_PLANT_CAPACITY
         self._data['NrOfLocations'] = 0
@@ -400,6 +402,14 @@ class SndpGraph():
         # Stochastic data
         self._scenarios = []
         self.regenerate_stochastic_data(num_scen)
+
+    @property
+    def sales_price(self):
+        return self._data['SalesPrice']
+
+    @sales_price.setter
+    def sales_price(self, value):
+        self._data['SalesPrice'] = value
 
     @property
     def data_as_dict(self):
@@ -571,6 +581,23 @@ class SndpGraph():
             model_formulation = model_formulation.replace(f'SNDP_default_{data_item_name}.dat', str(out_filename))
 
         Path(filename + '.mpl').write_text(model_formulation)
+
+    def adjust_sales_price(self):
+
+        '''Find the smallest value of SalesPrice
+        that does not decrease the number of open plants.
+        Motivation: has as small obj value as possible to avoid numerical issues.'''
+
+        try:
+            from sndp_gen.sndp_model import SndpModel
+        except ImportError:
+            warn('optconvert is not installed, adjust_sales_price() will not be executed', ImportWarning)
+            return
+        self.export_mpl(f'{self.name}')
+        sndp_model = SndpModel(Path(f'{self.name}.mpl'))
+        sndp_model.adjust_sales_price()
+        self.sales_price = sndp_model.data_as_dict['SalesPrice']
+        self._data_valid_export['ScalarData'] = None
 
     def _clear_nodes_data_cache(self):
         self._data_valid_export['ScalarData'] = None

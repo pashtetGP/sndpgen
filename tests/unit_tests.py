@@ -1,7 +1,7 @@
 from unittest import TestCase, TestLoader, TextTestRunner
 from pathlib import Path
 import sys
-from sndp_gen import SndpGraph, Timer, parse_args, command_line
+from sndp_gen import SndpGraph, Timer, parse_args_sndp_gen, sndp_gen_command
 
 class TestSndpGraph(TestCase):
 
@@ -43,16 +43,22 @@ class TestSndpGraph(TestCase):
         self.assertListEqual(data['Prob'], [{'SCEN': 1, 'value': 0.5}, {'SCEN': 2, 'value': 0.5}])
         self.assertListEqual(data['Demand'], [{'SCEN': 1, 'value': 5673}, {'SCEN': 2, 'value': 7295}])
 
+    def test_adjust_sales_price(self):
+        num_locations = 10
+        num_products = 5
+        num_scen = 3
+        graph = SndpGraph('instance_name', num_locations, num_products, num_scen, 2)
+        init_sales_price = graph.sales_price
+        graph.adjust_sales_price()
+        self.assertLessEqual(graph.sales_price, init_sales_price)
+
     @classmethod
     def tearDownClass(cls):
-        files_to_delete = ['instance_name.jpg', 'instance_name']
-        for filename in files_to_delete:
-            f = Path(filename)
-            if f.is_file():
-                f.unlink()
+        for file in Path().glob("instance_name*"):
+            file.unlink()
 
 
-class TestCommandLine(TestCase):
+class TestCommandLineSndpGen(TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -60,34 +66,63 @@ class TestCommandLine(TestCase):
 
     def test_parse_args(self):
         filename = 'param.yaml'
-        parsed = parse_args(['--yaml', filename])
+        parsed = parse_args_sndp_gen(['--yaml', filename])
         self.assertEqual(parsed.yaml, filename)
 
     def test_parse_args_default_yaml(self):
-        parsed = parse_args([])
+        parsed = parse_args_sndp_gen([])
         self.assertEqual(parsed.yaml, 'param.yaml')
 
     def test_command_line(self):
         Timer('test_command_line').start()
         filename = 'param.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
-        self.assertTrue(command_line())
+        self.assertTrue(sndp_gen_command())
         Timer('test_command_line').pause()
         Timer.report()
 
     def test_command_default_yaml(self):
-        self.assertTrue(command_line())
+        self.assertTrue(sndp_gen_command())
 
     def test_command_wrong_yaml(self):
         filename = 'param_wrong.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
-        self.assertFalse(command_line())
+        self.assertFalse(sndp_gen_command())
 
     @classmethod
     def tearDownClass(cls):
         for file in Path().glob("SNDP_*"):
-            file.unlink()
+             file.unlink()
 
+
+try:
+    from sndp_gen.sndp_model import SndpModel
+except ImportError:
+    pass
+else:
+    class TestSndpModel(TestCase):
+
+        @classmethod
+        def setUpClass(cls):
+            cls.model_path = Path(f'10_5_0_1.mpl')
+
+        def test_adjust_sales_price(self):
+            original_sndp_model = SndpModel(self.model_path)
+            sndp_model_path = Path(f'SNDP_10_5_0_1_temp.mpl')
+            original_sndp_model.export(sndp_model_path) # we do not want to modify the original model
+            sndp_model = SndpModel(sndp_model_path)
+            init_sales_price = sndp_model.data_as_dict['SalesPrice']
+            init_num_open_locations = len(sndp_model.solution_open_production)
+            sndp_model.adjust_sales_price()
+            adjusted_sales_price = sndp_model.data_as_dict['SalesPrice']
+            adjusted_num_open_locations = len(sndp_model.solution_open_production)
+            self.assertLessEqual(adjusted_sales_price, init_sales_price)
+            self.assertLessEqual(init_num_open_locations, adjusted_num_open_locations)
+
+        @classmethod
+        def tearDownClass(cls):
+            for file in Path().glob("SNDP_*"):
+                file.unlink()
 
 if __name__ == '__main__':
     loader = TestLoader()

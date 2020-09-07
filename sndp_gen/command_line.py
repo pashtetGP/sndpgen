@@ -4,7 +4,7 @@ from pathlib import Path
 import yaml
 from sndp_gen import SndpGraph
 
-def parse_args(args):
+def parse_args_sndp_gen(args):
 
     parser = argparse.ArgumentParser(prog='sndp_gen',
                                      description='sndp_gen generates .cor, .tim, .cor files of Stochastic Network Design Problems for the specifc number of locations, products and scenarios.')
@@ -43,7 +43,7 @@ def read_parameters(yaml_filename):
                 print(e)
 
 
-def command_line():
+def sndp_gen_command():
 
     '''
 
@@ -51,7 +51,7 @@ def command_line():
     '''
 
     result = False
-    parsed = parse_args(sys.argv[1:])
+    parsed = parse_args_sndp_gen(sys.argv[1:])
     yaml_filename = parsed.yaml
 
     parameters = read_parameters(yaml_filename)
@@ -77,9 +77,10 @@ def command_line():
             for num_products in list_num_products:
                 for variation in range(num_variations):
                     num_scen = list_num_scen[0]  # generate instance for the first num_scen in the list_num_scen
-                    instance_name = 'SNDP_{}_{}_{}'.format(num_locations, num_products, variation)
-                    graph = SndpGraph(instance_name, num_locations, num_products, num_scen, random_seed=variation)
-                    graph.export_mpl(instance_name + '_' + str(num_scen))
+                    instance_name = 'SNDP_{}_{}_{}_'.format(num_locations, num_products, variation)
+                    graph = SndpGraph(instance_name + str(num_scen), num_locations, num_products, num_scen, random_seed=variation)
+                    graph.adjust_sales_price()
+                    graph.export_mpl(graph.name)
                     if num_locations <= SndpGraph.INT_MAX_LOCATIONS_TO_VISUALIZE:
                         graph.visualize(to_file=instance_name)
                     # We change only stochastic data for this instances.
@@ -87,8 +88,22 @@ def command_line():
                     # stays the same, the core data will also be the same
                     for num_scen in list_num_scen[1:]:
                         graph.regenerate_stochastic_data(num_scen)
-                        graph.export_mpl(instance_name + '_' + str(num_scen))
+                        graph.export_mpl(instance_name + str(num_scen))
 
         result = True
 
     return result
+
+def adjust_price_command():
+    '''
+    Adjust sales price for all SNDP .mpl problems
+    '''
+
+    try:
+        from sndp_gen.sndp_model import SndpModel
+    except ImportError:
+        print('OptiMax Library is not installed. Cannot adjust prices of sndp models in .mpl')
+        return
+    for file in Path().glob("*.mpl"):
+        sndp_model = SndpModel(file)
+        sndp_model.adjust_sales_price()

@@ -40,7 +40,8 @@ setup(name='sndp_gen',
       include_package_data=True, # files from MANIFEST.in
       test_suite='tests',
       entry_points = {
-        'console_scripts': ['sndp_gen=sndp_gen.command_line:command_line'],
+        'console_scripts': ['sndp_gen=sndp_gen.command_line:sndp_gen_command',
+                            'sndp_adjust_price=sndp_gen.command_line:adjust_price_command'],
       },
       install_requires=INSTALL_REQUIRES
 )

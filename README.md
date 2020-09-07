@@ -1,7 +1,7 @@
 # Installation
 
 - cd run in command line to project folder, e.g.,  `cd C:\CodingProjects\opt_convert`
-- run `pip install ..\opt_convert`
+- run `pip install ..\sndp_gen`
 	
 # To uninstall
 
