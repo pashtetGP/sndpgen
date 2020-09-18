@@ -1,7 +1,7 @@
 from unittest import TestCase, TestLoader, TextTestRunner
 from pathlib import Path
 import sys
-from sndp_gen import SndpGraph, Timer, parse_args_sndp_gen, sndp_gen_command
+from sndpgen import SndpGraph, Timer, parse_args_sndp_gen, generate_command
 
 class TestSndpGraph(TestCase):
 
@@ -77,17 +77,17 @@ class TestCommandLineSndpGen(TestCase):
         Timer('test_command_line').start()
         filename = 'param.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
-        self.assertTrue(sndp_gen_command())
+        self.assertTrue(generate_command())
         Timer('test_command_line').pause()
         Timer.report()
 
     def test_command_default_yaml(self):
-        self.assertTrue(sndp_gen_command())
+        self.assertTrue(generate_command())
 
     def test_command_wrong_yaml(self):
         filename = 'param_wrong.yaml'
         sys.argv = sys.argv + ['--yaml', filename]
-        self.assertFalse(sndp_gen_command())
+        self.assertFalse(generate_command())
 
     @classmethod
     def tearDownClass(cls):
@@ -96,7 +96,7 @@ class TestCommandLineSndpGen(TestCase):
 
 
 try:
-    from sndp_gen.sndp_model import SndpModel
+    from sndpgen.sndp_model import SndpModel
 except ImportError:
     pass
 else:

@@ -589,7 +589,7 @@ class SndpGraph():
         Motivation: has as small obj value as possible to avoid numerical issues.'''
 
         try:
-            from sndp_gen.sndp_model import SndpModel
+            from sndpgen.sndp_model import SndpModel
         except ImportError:
             warn('optconvert is not installed, adjust_sales_price() will not be executed', ImportWarning)
             return

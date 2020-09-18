@@ -2,12 +2,12 @@ import argparse
 import sys
 from pathlib import Path
 import yaml
-from sndp_gen import SndpGraph
+from sndpgen import SndpGraph
 
 def parse_args_sndp_gen(args):
 
-    parser = argparse.ArgumentParser(prog='sndp_gen',
-                                     description='sndp_gen generates .cor, .tim, .cor files of Stochastic Network Design Problems for the specifc number of locations, products and scenarios.')
+    parser = argparse.ArgumentParser(prog='sndpgen',
+                                     description='sndpgen generates .cor, .tim, .cor files of Stochastic Network Design Problems for the specifc number of locations, products and scenarios.')
 
     parser.add_argument('--yaml', type=str, default='param.yaml', action='store',
                         help='''yaml file with the parameters of SNDP problems to generate: number of locations, products etc. Filename should include the extension. Default: param.yaml\n
@@ -43,7 +43,7 @@ def read_parameters(yaml_filename):
                 print(e)
 
 
-def sndp_gen_command():
+def generate_command():
 
     '''
 
@@ -94,13 +94,13 @@ def sndp_gen_command():
 
     return result
 
-def adjust_price_command():
+def adjust_command():
     '''
     Adjust sales price for all SNDP .mpl problems
     '''
 
     try:
-        from sndp_gen.sndp_model import SndpModel
+        from sndpgen.sndp_model import SndpModel
     except ImportError:
         print('OptiMax Library is not installed. Cannot adjust prices of sndp models in .mpl')
         return

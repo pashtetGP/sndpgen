@@ -14,7 +14,7 @@ long_description = """
     https://github.com/pashtetgp/opt_convert - README
   """
 
-setup(name='sndp_gen',
+setup(name='sndpgen',
       version='0.0.1',
       python_requires='>=3.6', # does not work for some reason
       description='Converter for mathematical optimization formats: .mpl, .lp, .mps -> .mps, .lp, .xa, .mpl, mod etc.',
@@ -40,8 +40,8 @@ setup(name='sndp_gen',
       include_package_data=True, # files from MANIFEST.in
       test_suite='tests',
       entry_points = {
-        'console_scripts': ['sndp_gen=sndp_gen.command_line:sndp_gen_command',
-                            'sndp_adjust_price=sndp_gen.command_line:adjust_price_command'],
+        'console_scripts': ['sndp_gen=sndpgen.command_line:generate_command',
+                            'sndp_adjust=sndpgen.command_line:adjust_command'],
       },
       install_requires=INSTALL_REQUIRES
 )
