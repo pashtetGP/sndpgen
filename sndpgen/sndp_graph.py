@@ -535,7 +535,11 @@ class SndpGraph():
         # print(self.dot_graph.source)
         if to_file is None:
             to_file = self.name
-        self.dot_graph.render(to_file, view=view)
+        try:
+            self.dot_graph.render(to_file, view=view)
+        except Exception as e:
+            print(f"WARNING: Visulalization of {self.name} failed. Due to this error: {e}")
+
 
     def export_mpl(self, filename : str):
 
